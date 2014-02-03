@@ -30,6 +30,7 @@
           <div class="row">
             <div class="span3">
               <a href="{% url "home" %}"><span class="nav-logo"></span></a>
+              <span class="nav-title">Bangladesh AVC</span>
             </div>
             <div class="span9">
               <div class="nav-collapse pull-right">
@@ -114,22 +115,14 @@
                     <a href="{% url "home" %}">{% trans "Home" %}</a>
                   </li>
                   <li id="nav_data">
-                    <a href="{% url "layer_browse" %}">{% trans "Layers" %}</a>
+                    <a href="{% url "layer_browse" %}">{% trans "GeoData" %}</a>
                   </li>
                   <li id="nav_maps">
                     <a href="{% url "maps_browse" %}">{% trans "Maps" %}</a>
                   </li>
     
-                  {% if DOCUMENTS_APP %}
-                  <li id="nav_documents">
-                    <a href="{% url "documents_browse" %}">{% trans "Documents" %}</a>
-                  </li>
-                  {% endif %}
-                  <li id="nav_people">
-                    <a href="{% url "profile_browse" %}">{% trans "People" %}</a>
-                  </li>
                   <li id="nav_search">
-                    <a href="{% url "advanced_search" %}">{% trans "Search" %}</a>
+                    <a href="{% url "advanced_search" %}">{% trans "GeoData Search" %}</a>
                   </li>
                   {% block extra-nav %}{% endblock %}
                 </ul>

@@ -6,7 +6,7 @@
 {% load staticfiles %}
 {% load url from future %}
 
-{% block title %} {% trans "Welcome!" %} - {{ block.super }} {% endblock %}
+{% block title %} {% trans "Bangladesh AVC" %} - {{ block.super }} {% endblock %}
 
 {% block body_class %}home{% endblock %}
 
@@ -14,15 +14,14 @@
 <div class="span12">
   {% block hero %}
   <div class="hero-unit">
-    <h1>{% trans "Welcome" %}</h1>
+    <h1>{% trans "Bangladesh AVC" %}</h1>
     <div class="hero-unit-content">
       <div class="intro">
         <p>
           {% blocktrans %}
-            GeoNode is an open source platform for sharing geospatial data and maps.  If you have any questions about the software or service, join our <a href="https://groups.google.com/d/forum/geonode-users">mailing list</a>.
+            Welcome to the Bangladesh Datanode.  This is used to share, manage, and visualize spatial and non-spatial data for project decision-making and reporting.
           {% endblocktrans %}
         </p>
-        <span>{% trans 'Need help' %} <a href="http://docs.geonode.org/en/latest/tutorials/users/quickstart/index.html">{% trans 'Getting Started?' %}</a></span>
       </div>
       <div class="btns">
         <a class="btn btn-large" href="{% url "layer_browse" %}">
@@ -63,15 +62,6 @@
           </section>
         </div>
       {% endif %}
-      <div class="well">
-        <h2>{% trans "Latest Maps" %}</h2>
-        <section class="article-list latest-maps">
-          {% featured_maps as featured_maps %}
-          {% for map in featured_maps %}
-            {% include "maps/_map_list_item.html" %}
-          {% endfor %}
-        </section>
-      </div>
     </aside>
   </div>
   {% endblock %}
