@@ -101,10 +101,6 @@
                   </ul>
                 </div>
               </div>
-              <form class="input-append  pull-right" action="{% url "search" %}" method="GET">
-                {# csrf_token #}
-                <input id="search" type="text" name="q"/>
-              </form>
             </div>
           </div>
           <div class="row nav-box">
@@ -123,6 +119,9 @@
     
                   <li id="nav_search">
                     <a href="{% url "advanced_search" %}">{% trans "GeoData Search" %}</a>
+                  </li>
+                   <li id="nav_datamanager">
+                    <a href="{% url "datamanager" %}">{% trans "Data Manager" %}</a>
                   </li>
                   {% block extra-nav %}{% endblock %}
                 </ul>

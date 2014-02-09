@@ -1,0 +1,3 @@
+[submodule "datamanager"]
+	path = geonode/datamanager
+	url = git@github.com:nathanhilbert/genode_datamanger.git

@@ -204,6 +204,10 @@ INSTALLED_APPS = (
     'geonode.social',
     'geonode.catalogue',
     'geonode.documents',
+
+    #custom modules
+    'geonode.datamanager',
+    'django_reset',
 )
 
 LOGGING = {
