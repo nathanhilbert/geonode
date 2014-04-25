@@ -77,9 +77,10 @@ setup(name='GeoNode',
         "pillow",
         "lxml",
         # python dependencies
-        "gsconfig==0.6.7",
+        "gsconfig==0.6.9",
         "OWSLib==0.7.2",
         "Django==1.5.5",
+        "gsimporter==0.1",
         # Django Apps
         "pinax-theme-bootstrap==3.0a11",
         "pinax-theme-bootstrap-account==1.0b2",
@@ -90,7 +91,7 @@ setup(name='GeoNode',
         "django-friendly-tag-loader==1.1",
         "django-taggit==0.10a1",
         "django-taggit-templatetags",
-        "django-geoexplorer==3.0.5",
+        "django-geoexplorer==4.0.2",
         "django-notification==1.0",
         "django-announcements==1.0.2",
         "django-activity-stream==0.4.4",
@@ -99,10 +100,12 @@ setup(name='GeoNode',
         "geonode-avatar==2.1.1",
         "dialogos==0.2",
         "agon-ratings==0.2",
-        "South==0.7.3",
+        "South==0.8.4",
         "django-downloadview==1.2",
+        "django-tastypie==0.11.0",
+        "django-polymorphic==0.5.3",
         #catalogue
-        "pycsw==1.6.1",
+        "pycsw==1.6.4",
         # setup
         "Paver",
         # sample and test data / metadata
@@ -114,6 +117,9 @@ setup(name='GeoNode',
         "MultipartPostHandler",
         # translation
         "transifex-client",
+        #haystack/elasticsearch, uncomment to use
+        #"django-haystack==2.1.0",
+        #"pyelasticsearch==0.6.1"
         ],
       zip_safe=False,
       )

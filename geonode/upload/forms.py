@@ -16,14 +16,14 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #########################################################################
+import os
+import files
+import tempfile
 from django import forms
 from django.conf import settings
 from geonode.layers.forms import JSONField
 from geonode.upload.models import UploadFile 
-from geonode.utils import ogc_server_settings
-import os
-import tempfile
-import files
+
 
 class UploadFileForm(forms.ModelForm):
     class Meta:
@@ -49,6 +49,7 @@ class LayerUploadForm(forms.Form):
     spatial_files = ("base_file", "dbf_file", "shx_file", "prj_file", "sld_file", "xml_file")
 
     def clean(self):
+        from geonode.utils import ogc_server_settings
         requires_datastore = () if ogc_server_settings.DATASTORE else ('.csv','.kml')
         types = [ t for t in files.types if t.code not in requires_datastore]
         supported_type = lambda ext: any([t.matches(ext) for t in types])

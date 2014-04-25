@@ -32,10 +32,10 @@ from django.conf import settings
 from django.template import RequestContext
 from django.utils.translation import ugettext as _
 from django.utils import simplejson as json
+from django.utils.html import strip_tags
 from django.views.decorators.http import require_POST
 
 from geonode.views import _handleThumbNail
-from geonode.utils import http_client
 from geonode.layers.models import Layer
 from geonode.maps.models import Map, MapLayer
 from geonode.utils import forward_mercator
@@ -47,13 +47,10 @@ from geonode.maps.forms import MapForm
 from geonode.security.enumerations import AUTHENTICATED_USERS, ANONYMOUS_USERS
 from geonode.security.views import _perms_info
 from geonode.documents.models import get_related_documents
-from geonode.utils import ogc_server_settings
 from geonode.base.models import ContactRole
 from geonode.people.forms import ProfileForm, PocForm
 
 logger = logging.getLogger("geonode.maps.views")
-
-_user, _password = ogc_server_settings.credentials
 
 DEFAULT_MAPS_SEARCH_BATCH_SIZE = 10
 MAX_MAPS_SEARCH_BATCH_SIZE = 25
@@ -124,7 +121,6 @@ def map_detail(request, mapid, template='maps/map_detail.html'):
         'layers': layers,
         'permissions_json': json.dumps(_perms_info(map_obj, MAP_LEV_NAMES)),
         "documents": get_related_documents(map_obj),
-        'ows': getattr(ogc_server_settings, 'ows', ''),
     }))
 
 @login_required
@@ -144,6 +140,8 @@ def map_metadata(request, mapid, template='maps/map_metadata.html'):
         new_poc = map_form.cleaned_data['poc']
         new_author = map_form.cleaned_data['metadata_author']
         new_keywords = map_form.cleaned_data['keywords']
+        new_title = strip_tags(map_form.cleaned_data['title'])
+        new_abstract = strip_tags(map_form.cleaned_data['abstract'])
 
         if new_poc is None:
             if poc.user is None:
@@ -166,8 +164,12 @@ def map_metadata(request, mapid, template='maps/map_metadata.html'):
             the_map = map_form.save()
             the_map.poc = new_poc
             the_map.metadata_author = new_author
+            the_map.title = new_title
+            the_map.abstract = new_abstract
+            the_map.save()
             the_map.keywords.clear()
             the_map.keywords.add(*new_keywords)
+
             return HttpResponseRedirect(reverse('map_detail', args=(map_obj.id,)))
 
     if poc.user is None:
@@ -194,22 +196,29 @@ def map_metadata(request, mapid, template='maps/map_metadata.html'):
 @login_required
 def map_remove(request, mapid, template='maps/map_remove.html'):
     ''' Delete a map, and its constituent layers. '''
-    map_obj = _resolve_map(request, mapid, 'maps.delete_map',
-                           _PERMISSION_MSG_DELETE, permission_required=True)
+    try:
+        map_obj = _resolve_map(request, mapid, 'maps.delete_map',
+                               _PERMISSION_MSG_DELETE, permission_required=True)
 
-    if request.method == 'GET':
-        return render_to_response(template, RequestContext(request, {
-            "map": map_obj
-        }))
+        if request.method == 'GET':
+            return render_to_response(template, RequestContext(request, {
+                "map": map_obj
+            }))
 
-    elif request.method == 'POST':
-        layers = map_obj.layer_set.all()
-        for layer in layers:
-            layer.delete()
-        map_obj.delete()
+        elif request.method == 'POST':
+            layers = map_obj.layer_set.all()
+            for layer in layers:
+                layer.delete()
+            map_obj.delete()
 
-        return HttpResponseRedirect(reverse("maps_browse"))
+            return HttpResponseRedirect(reverse("maps_browse"))
 
+    except PermissionDenied:
+            return HttpResponse(
+                   'You are not allowed to delete this map',
+                   mimetype="text/plain",
+                   status=401
+            )
 
 def map_embed(request, mapid=None, template='maps/map_embed.html'):
     if mapid is None:
@@ -367,7 +376,7 @@ def new_map_config(request):
                 layers.append(MapLayer(
                     map = map_obj,
                     name = layer.typename,
-                    ows_url = ogc_server_settings.public_url + "wms",
+                    ows_url = layer.ows_url(),
                     layer_params=json.dumps( layer.attribute_config()),
                     visibility = True
                 ))
@@ -410,6 +419,8 @@ def map_download(request, mapid, template='maps/map_download.html'):
     XXX To do, remove layer status once progress id done
     This should be fix because
     """
+    from geonode.utils import http_client
+    from geonode.utils import ogc_server_settings
     mapObject = _resolve_map(request, mapid, 'maps.view_map')
 
     map_status = dict()
@@ -462,7 +473,6 @@ def map_download(request, mapid, template='maps/map_download.html'):
          "locked_layers": locked_layers,
          "remote_layers": remote_layers,
          "downloadable_layers": downloadable_layers,
-         "geoserver" : ogc_server_settings.public_url,
          "site" : settings.SITEURL
     }))
 
@@ -471,6 +481,8 @@ def map_download_check(request):
     """
     this is an endpoint for monitoring map downloads
     """
+    from geonode.utils import http_client
+    from geonode.utils import ogc_server_settings
     try:
         layer = request.session["map_status"]
         if type(layer) == dict:
@@ -506,7 +518,7 @@ def map_wms(request, mapid):
     GET: return endpoint information for group layer,
     PUT: update existing or create new group layer.
     """
-
+    from geonode.utils import ogc_server_settings
     mapObject = _resolve_map(request, mapid, 'maps.view_map')
 
     if request.method == 'PUT':
@@ -528,56 +540,6 @@ def map_wms(request, mapid):
         return HttpResponse(json.dumps(response), mimetype="application/json")
 
     return HttpResponseNotAllowed(['PUT', 'GET'])
-
-#### MAPS PERMISSIONS ####
-
-def map_set_permissions(m, perm_spec):
-    if "authenticated" in perm_spec:
-        m.set_gen_level(AUTHENTICATED_USERS, perm_spec['authenticated'])
-    if "anonymous" in perm_spec:
-        m.set_gen_level(ANONYMOUS_USERS, perm_spec['anonymous'])
-    users = [n[0] for n in perm_spec['users']]
-    excluded = users + [m.owner]
-    existing = m.get_user_levels().exclude(user__username__in=excluded)
-    existing.delete()
-    for username, level in perm_spec['users']:
-        user = User.objects.get(username=username)
-        m.set_user_level(user, level)
-
-def map_permissions(request, mapid):
-    try:
-        map_obj = _resolve_map(request, mapid, 'maps.change_map_permissions')
-    except PermissionDenied:
-        # we are handling this differently for the client
-        return HttpResponse(
-            'You are not allowed to change permissions for this map',
-            status=401,
-            mimetype='text/plain'
-        )
-
-    if request.method == 'POST':
-        permission_spec = json.loads(request.raw_post_data)
-        map_set_permissions(map_obj, permission_spec)
-
-        return HttpResponse(
-            json.dumps({'success': True}),
-            status=200,
-            mimetype='text/plain'
-        )
-
-    elif request.method == 'GET':
-        permission_spec = json.dumps(map_obj.get_all_level_info())
-        return HttpResponse(
-            json.dumps({'success': True, 'permissions': permission_spec}),
-            status=200,
-            mimetype='text/plain'
-        )
-    else:
-        return HttpResponse(
-            'No methods other than get and post are allowed',
-            status=401,
-            mimetype='text/plain')
-
 
 def _map_fix_perms_for_editor(info):
     perms = {

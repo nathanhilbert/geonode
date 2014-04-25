@@ -26,6 +26,8 @@ from django.views.generic import TemplateView
 
 import geonode.proxy.urls
 
+from geonode.api.urls import api
+
 # Setup Django Admin
 from django.contrib import admin
 admin.autodiscover()
@@ -60,12 +62,6 @@ urlpatterns = patterns('',
     # Search views
     (r'^search/', include('geonode.search.urls')),
 
-    # Upload views
-    (r'^upload/', include('geonode.upload.urls')),
-
-    # GeoServer Helper Views 
-    (r'^gs/', include('geonode.geoserver.urls')),
-
     # Social views
     (r"^account/", include("account.urls")),
     (r'^people/', include('geonode.people.urls')),
@@ -82,6 +78,8 @@ urlpatterns = patterns('',
                                        name='account_ajax_login'),
     url(r'^account/ajax_lookup$', 'geonode.views.ajax_lookup',
                                        name='account_ajax_lookup'),
+    url(r'^security/permissions/(?P<type>[^/]*)/(?P<resource_id>\d+)$', 'geonode.security.views.resource_permissions',
+                                       name='resource_permissions'),
 
     # Meta
     url(r'^lang\.js$', TemplateView.as_view(template_name='lang.js', content_type='text/javascript'), name='lang'),
@@ -95,15 +93,31 @@ urlpatterns = patterns('',
     #custom modules
     (r"^datamanager/", include("geonode.datamanager.urls")),
 
+    url(r'', include(api.urls)),
     )
 
 #Documents views
-if settings.DOCUMENTS_APP:
+if 'geonode.documents' in settings.INSTALLED_APPS:
     urlpatterns += patterns('',
         (r'^documents/', include('geonode.documents.urls')),
     )
 
+if "geonode.contrib.groups" in settings.INSTALLED_APPS:
+    urlpatterns += patterns('',
+        (r'^groups/', include('geonode.contrib.groups.urls')),
+    )
+
+if 'geonode.geoserver' in settings.INSTALLED_APPS:
+    # GeoServer Helper Views
+    urlpatterns += patterns('', 
+        # Upload views
+        (r'^upload/', include('geonode.upload.urls')),
+        (r'^gs/', include('geonode.geoserver.urls')),
+    )
+
+# Set up proxy
 urlpatterns += geonode.proxy.urls.urlpatterns
+
 
 # Serve static files
 urlpatterns += staticfiles_urlpatterns()

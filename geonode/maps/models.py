@@ -46,16 +46,10 @@ from geonode.utils import GXPLayerBase
 from geonode.utils import layer_from_viewer_config
 from geonode.utils import default_map_config
 from geonode.utils import forward_mercator
-from geonode.utils import http_client, ogc_server_settings
 
-from geoserver.catalog import Catalog
-from geoserver.layer import Layer as GsLayer
-from geoserver.layergroup import UnsavedLayerGroup as GsUnsavedLayerGroup
 from agon_ratings.models import OverallRating
 
 logger = logging.getLogger("geonode.maps.models")
-
-_user, _password = ogc_server_settings.credentials
 
 class Map(ResourceBase, GXPMapBase):
     """
@@ -205,80 +199,12 @@ class Map(ResourceBase, GXPMapBase):
     def get_absolute_url(self):
         return reverse('geonode.maps.views.map_detail', None, [str(self.id)])
 
-    def update_thumbnail(self, save=True):
-        if len(self.layers) == 0:
-            return
-        if self.thumbnail == None:
-            self.save_thumbnail(self._thumbnail_url(width=240, height=180), save)
-                
 
-    def _render_thumbnail(self, spec):
-        http = httplib2.Http()
-        url = "%srest/printng/render.png" % ogc_server_settings.LOCATION
-        hostname = urlparse(settings.SITEURL).hostname
-        params = dict(width=240, height=180, auth="%s,%s,%s" % (hostname, _user, _password))
-        url = url + "?" + urllib.urlencode(params)
-        http.add_credentials(_user, _password)
-        netloc = urlparse(url).netloc
-        http.authorizations.append(
-        httplib2.BasicAuthentication(
-            (_user,_password),
-            netloc,
-            url,
-            {},
-            None,
-            None,
-            http
-        ))
-        # @todo annoying but not critical
-        # openlayers controls posted back contain a bad character. this seems
-        # to come from a &minus; entity in the html, but it gets converted
-        # to a unicode en-dash but is not uncoded properly during transmission
-        # 'ignore' the error for now as controls are not being rendered...
-        data = spec 
-        if type(data) == unicode:
-            # make sure any stored bad values are wiped out
-            # don't use keyword for errors - 2.6 compat
-            # though unicode accepts them (as seen below)
-            data = data.encode('ASCII','ignore')
-        data = unicode(data, errors='ignore').encode('UTF-8')
+    def get_thumbnail_url(self):
         try:
-            resp, content = http.request(url,"POST",data,{
-                'Content-type':'text/html'
-            })
-        except Exception:
-            logging.warning('Error generating thumbnail')
-            return 
-        if resp.status < 200 or resp.status > 299:
-            logging.warning('Error generating thumbnail %s',content)
-            return 
-        if len(content) == 0:
-            logging.warning('Empty thumb content %s',content)
-            return
-        return content
-
-    def _thumbnail_url(self, width=20, height=None):
-        """ Generate a URL representing thumbnail of the layer """
-
-        local_layers = []
-        for layer in self.layers:
-            if layer.local:
-                local_layers.append(Layer.objects.get(typename=layer.name).typename)
-
-        params = {
-            'layers': ",".join(local_layers),
-            'format': 'image/png8',
-            'width': width,
-        }
-        if height is not None:
-            params['height'] = height
-
-        # Avoid using urllib.urlencode here because it breaks the url.
-        # commas and slashes in values get encoded and then cause trouble
-        # with the WMS parser.
-        p = "&".join("%s=%s"%item for item in params.items())
-
-        return '<img src="%s"/>' % (ogc_server_settings.public_url + "wms/reflect?" + p)
+            return self.thumbnail.thumb_file.url
+        except:
+            return None
 
     class Meta:
         # custom permissions,
@@ -291,20 +217,6 @@ class Map(ResourceBase, GXPMapBase):
     LEVEL_READ  = 'map_readonly'
     LEVEL_WRITE = 'map_readwrite'
     LEVEL_ADMIN = 'map_admin'
-
-    def set_default_permissions(self):
-        self.set_gen_level(ANONYMOUS_USERS, self.LEVEL_READ)
-        self.set_gen_level(AUTHENTICATED_USERS, self.LEVEL_READ)
-
-        # remove specific user permissions
-        current_perms =  self.get_all_level_info()
-        for username in current_perms['users'].keys():
-            user = User.objects.get(username=username)
-            self.set_user_level(user, self.LEVEL_NONE)
-
-        # assign owner admin privs
-        if self.owner:
-            self.set_user_level(self.owner, self.LEVEL_ADMIN)
 
     def get_extent(self):
         """Generate minx/miny/maxx/maxy of map extent"""
@@ -365,7 +277,7 @@ class Map(ResourceBase, GXPMapBase):
             map_layers.append(MapLayer(
                 map = self,
                 name = layer.typename,
-                ows_url = ogc_server_settings.public_url + "wms",
+                ows_url = layer.ows_url(),
                 stack_order = index,
                 visibility = True
             ))
@@ -412,14 +324,23 @@ class Map(ResourceBase, GXPMapBase):
         """
         Returns layer group name from local OWS for this map instance.
         """
-        cat = Catalog(ogc_server_settings.rest, _user, _password)
-        lg_name = '%s_%d' % (slugify(self.title), self.id)
-        return cat.get_layergroup(lg_name)
- 
+        if 'geonode.geoserver' in settings.INSTALLED_APPS:
+            from geonode.geoserver.helpers import gs_catalog
+            lg_name = '%s_%d' % (slugify(self.title), self.id)
+            return gs_catalog.get_layergroup(lg_name)
+        else:
+            return None
+
     def publish_layer_group(self):
         """
         Publishes local map layers as WMS layer group on local OWS.
         """
+        if 'geonode.geoserver' not in settings.INSTALLED_APPS:
+            from geonode.geoserver.helpers import gs_catalog
+            from geoserver.layergroup import UnsavedLayerGroup as GsUnsavedLayerGroup
+        else:
+            raise Exception('Cannot publish layer group if geonode.geoserver is not in INSTALLED_APPS')
+
         # temporary permission workaround: 
         # only allow public maps to be published
         if not self.is_public:
@@ -443,13 +364,12 @@ class Map(ResourceBase, GXPMapBase):
         lg_name = '%s_%d' % (slugify(self.title), self.id)
 
         # Update existing or add new group layer
-        cat = Catalog(ogc_server_settings.rest, _user, _password)
         lg = self.layer_group
         if lg is None:
-            lg = GsUnsavedLayerGroup(cat, lg_name, lg_layers, lg_styles, lg_bounds)
+            lg = GsUnsavedLayerGroup(gs_catalog, lg_name, lg_layers, lg_styles, lg_bounds)
         else:
             lg.layers, lg.styles, lg.bounds = lg_layers, lg_styles, lg_bounds
-        cat.save(lg)
+        gs_catalog.save(lg)
         return lg_name
 
 
@@ -559,31 +479,13 @@ class MapLayer(models.Model, GXPLayerBase):
     def __unicode__(self):
         return '%s?layers=%s' % (self.ows_url, self.name)
 
-def pre_save_maplayer(instance, sender, **kwargs):
-    # If this object was saved via fixtures,
-    # do not do post processing.
-    if kwargs.get('raw', False):
-        return
-
-    try:
-        c = Catalog(ogc_server_settings.internal_rest, _user, _password)
-        instance.local = isinstance(c.get_layer(instance.name),GsLayer)
-    except EnvironmentError, e:
-        if e.errno == errno.ECONNREFUSED:
-            msg = 'Could not connect to catalog to verify if layer %s was local' % instance.name
-            logger.warn(msg, e)
-        else:
-            raise e
 
 def pre_delete_map(instance, sender, **kwrargs):
     ct = ContentType.objects.get_for_model(instance)
     OverallRating.objects.filter(content_type = ct, object_id = instance.id).delete()
 
-def pre_save_map(instance, sender, **kwargs):
-    instance.update_thumbnail(save=False)
 
-signals.pre_save.connect(pre_save_maplayer, sender=MapLayer)
+
 signals.pre_delete.connect(pre_delete_map, sender=Map)
-signals.pre_save.connect(pre_save_map, sender=Map)
 signals.post_save.connect(resourcebase_post_save, sender=Map)
 signals.post_delete.connect(resourcebase_post_delete, sender=Map)

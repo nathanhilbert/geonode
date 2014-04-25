@@ -58,7 +58,6 @@
                       <li class="actions">
                         <!--a href="#" rel="tooltip" title="{% trans 'Notifications' %}"><i class="icon-bullhorn"></i></a>
                         <a href="#" rel="tooltip" title="{% trans 'Messages' %}"><i class="icon-envelope"></i></a-->
-                        <a href="{% url "data_upload" %}" rel="tooltip" title="{% trans 'Upload' %}"><i class="icon-upload-alt"></i></a>
                         <a href="{% url "help" %}" rel="tooltip" title="{% trans 'Help' %}"><i class="icon-question-sign"></i></a>
                       </li>
                     {% else %}
@@ -113,7 +112,7 @@
                     <a href="{% url "maps_browse" %}">{% trans "Maps" %}</a>
                   </li>
     
-                  {% if DOCUMENTS_APP %}
+                  {% if USE_DOCUMENTS %}
                   <li id="nav_documents">
                     <a href="{% url "documents_browse" %}">{% trans "Documents" %}</a>
                   </li>
