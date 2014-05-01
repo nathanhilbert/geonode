@@ -38,7 +38,7 @@ from django.core.urlresolvers import reverse
 from django.template.defaultfilters import slugify
 
 from geonode.layers.models import Layer
-from geonode.base.models import ResourceBase, resourcebase_post_save, resourcebase_post_delete
+from geonode.base.models import ResourceBase
 from geonode.maps.signals import map_changed_signal
 from geonode.security.enumerations import AUTHENTICATED_USERS, ANONYMOUS_USERS
 from geonode.utils import GXPMapBase
@@ -94,7 +94,7 @@ class Map(ResourceBase, GXPMapBase):
     @property
     def layers(self):
         layers = MapLayer.objects.filter(map=self.id)
-        return  [layer for layer in layers]
+        return [layer for layer in layers]
 
     @property
     def local_layers(self):
@@ -212,6 +212,20 @@ class Map(ResourceBase, GXPMapBase):
     LEVEL_WRITE = 'map_readwrite'
     LEVEL_ADMIN = 'map_admin'
 
+    def set_default_permissions(self):
+        self.set_gen_level(ANONYMOUS_USERS, self.LEVEL_READ)
+        self.set_gen_level(AUTHENTICATED_USERS, self.LEVEL_READ)
+
+        # remove specific user permissions
+        current_perms = self.get_all_level_info()
+        for username in current_perms['users'].keys():
+            user = User.objects.get(username=username)
+            self.set_user_level(user, self.LEVEL_NONE)
+
+        # assign owner admin privs
+        if self.owner:
+            self.set_user_level(self.owner, self.LEVEL_ADMIN)
+
     def get_extent(self):
         """Generate minx/miny/maxx/maxy of map extent"""
 
@@ -223,7 +237,6 @@ class Map(ResourceBase, GXPMapBase):
         """
         bbox = None
         for layer in layers:
-
             layer_bbox = layer.bbox
             if bbox is None:
                 bbox = list(layer_bbox[0:4])
@@ -232,12 +245,27 @@ class Map(ResourceBase, GXPMapBase):
                 bbox[1] = max(bbox[1], layer_bbox[1])
                 bbox[2] = min(bbox[2], layer_bbox[2])
                 bbox[3] = max(bbox[3], layer_bbox[3])
+        else:
+            return None
+        
+        self.bbox_x0 = bbox[0]
+        self.bbox_x1 = bbox[1]
+        self.bbox_y0 = bbox[2]
+        self.bbox_y1 = bbox[3]
 
-        if bbox is not None:
-            self.bbox_x0 = bbox[0]
-            self.bbox_x1 = bbox[1]
-            self.bbox_y0 = bbox[2]
-            self.bbox_y1 = bbox[3]
+        minx, miny, maxx, maxy = [float(c) for c in bbox]
+        x = (minx + maxx) / 2
+        y = (miny + maxy) / 2
+        (center_x, center_y) = forward_mercator((x,y))
+
+        width_zoom = math.log(360 / (maxx - minx), 2)
+        height_zoom = math.log(360 / (maxy - miny), 2)
+
+        zoom = math.ceil(min(width_zoom, height_zoom))
+
+        self.zoom = zoom
+        self.center_x = center_x
+        self.center_y = center_y
 
         return bbox
 
@@ -255,51 +283,39 @@ class Map(ResourceBase, GXPMapBase):
 
         DEFAULT_MAP_CONFIG, DEFAULT_BASE_LAYERS = default_map_config()
 
-        layer_objects = []
+        # Save the map in order to create an id in the database
+        # used below for the maplayers.
+        self.save()
+
         for layer in layers:
-            try:
-                layer = Layer.objects.get(typename=layer)
-            except ObjectDoesNotExist:
-                continue # Raise exception?
+            if not isinstance(layer, Layer):
+                try:
+                    layer = Layer.objects.get(typename=layer)
+                except ObjectDoesNotExist:
+                    raise GeoNodeError('Could not find layer with name %s' % layer)
 
             if not user.has_perm('maps.view_layer', obj=layer):
                 # invisible layer, skip inclusion or raise Exception?
-                continue # Raise Exception
-
-            layer_objects.append(layer)
-
-            map_layers.append(MapLayer(
+                raise GeoNodeError('User %s tried to create a map with layer %s without having premissions' % (user, layer))
+            MapLayer.objects.create(
                 map = self,
                 name = layer.typename,
                 ows_url = layer.get_ows_url(),
                 stack_order = index,
                 visibility = True
-            ))
+            )
 
-            bbox = self.set_bounds_from_layers(layer_objects)
-
-            if bbox is not None:
-                minx, miny, maxx, maxy = [float(c) for c in bbox]
-                x = (minx + maxx) / 2
-                y = (miny + maxy) / 2
-                (self.center_x,self.center_y) = forward_mercator((x,y))
-
-                width_zoom = math.log(360 / (maxx - minx), 2)
-                height_zoom = math.log(360 / (maxy - miny), 2)
-
-                self.zoom = math.ceil(min(width_zoom, height_zoom))
             index += 1
 
+        # Set bounding box based on all layers extents.
+        bbox = self.set_bounds_from_layers(self.local_layers)
+
+        self.set_missing_info()
+
+        # Save again to persist the zoom and bbox changes and
+        # to generate the thumbnail.
         self.save()
-        for bl in DEFAULT_BASE_LAYERS:
-            bl.map = self
-            #bl.save()
-
-        for ml in map_layers:
-            ml.map = self # update map_id after saving map
-            ml.save()
-
-        self.set_default_permissions()
+        
 
     @property
     def class_name(self):
@@ -481,5 +497,3 @@ def pre_delete_map(instance, sender, **kwrargs):
 
 
 signals.pre_delete.connect(pre_delete_map, sender=Map)
-signals.post_save.connect(resourcebase_post_save, sender=Map)
-signals.post_delete.connect(resourcebase_post_delete, sender=Map)

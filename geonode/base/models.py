@@ -254,6 +254,11 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin):
 
     thumbnail = models.ForeignKey(Thumbnail, null=True, blank=True, on_delete=models.SET_NULL)
 
+
+    def delete(self, *args, **kwargs):
+        super(ResourceBase, self).delete(*args, **kwargs)
+        resourcebase_post_delete(self)
+
     def __unicode__(self):
         return self.title
         
@@ -400,6 +405,36 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin):
         return os.path.exists(self.thumbnail.thumb_file.path)
 
 
+    def set_missing_info(self):
+        """Set default permissions and point of contacts.
+
+           It is mandatory to call it from descendant classes
+           but hard to enforce technically via signals or save overriding.
+        """
+        logger.debug('Checking for permissions.')
+        #  True if every key in the get_all_level_info dict is empty.
+        no_custom_permissions = all(map(lambda perm: not perm, self.get_all_level_info().values()))
+
+        if no_custom_permissions:
+            logger.debug('There are no permissions for this object, setting default perms.')
+            self.set_default_permissions()
+
+        if self.owner:
+            user = self.owner
+        else:
+            user = ResourceBase.objects.admin_contact().user
+
+        if self.poc is None:
+            pc, __ = Profile.objects.get_or_create(user=user,
+                                           defaults={"name": user.username}
+                                           )
+            self.poc = pc
+        if self.metadata_author is None:  
+            ac, __ = Profile.objects.get_or_create(user=user,
+                                           defaults={"name": user.username}
+                                           )
+            self.metadata_author = ac
+
     def maintenance_frequency_title(self):
         return [v for i, v in enumerate(UPDATE_FREQUENCIES) if v[0] == self.maintenance_frequency][0][1].title()
         
@@ -479,43 +514,8 @@ class Link(models.Model):
 
     objects = LinkManager()
 
-def resourcebase_post_save(instance, sender, **kwargs):
-    """
-    Since django signals are not propagated from child to parent classes we need to call this 
-    from the children.
-    TODO: once the django will support signal propagation we need to attach a single signal here
-    """
-    resourcebase = instance.resourcebase_ptr
-    if resourcebase.owner:
-        user = resourcebase.owner
-    else:
-        user = ResourceBase.objects.admin_contact().user
-        
-    if resourcebase.poc is None:
-        pc, __ = Profile.objects.get_or_create(user=user,
-                                           defaults={"name": user.username}
-                                           )
-        resourcebase.poc = pc
-    if resourcebase.metadata_author is None:  
-        ac, __ = Profile.objects.get_or_create(user=user,
-                                           defaults={"name": user.username}
-                                           )
-        resourcebase.metadata_author = ac
-
-    if hasattr(instance, 'set_default_permissions') and hasattr(instance, 'get_all_level_info'):
-        logger.debug('Checking for permissions.')
-
-        #  True if every key in the get_all_level_info dict is empty.
-        if all(map(lambda perm: not perm, instance.get_all_level_info().values())):
-            logger.debug('There are no permissions for this object, setting default perms.')
-            instance.set_default_permissions()
 
 
-def resourcebase_post_delete(instance, sender, **kwargs):
-    """
-    Since django signals are not propagated from child to parent classes we need to call this 
-    from the children.
-    TODO: once the django will support signal propagation we need to attach a single signal here
-    """
-    if instance.thumbnail:
+def resourcebase_post_delete(instance):
+    if instance.thumbnail is not None:
         instance.thumbnail.delete()
