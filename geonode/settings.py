@@ -620,3 +620,9 @@ TASTYPIE_DEFAULT_FORMATS = ['json']
 
 # gravatar settings
 AUTO_GENERATE_AVATAR_SIZES = (20,32,80,100,140,200)
+
+
+#no trailing slashes
+#example
+#GEOSERVER_CLUSTER_HOSTS = ['localhost:8181/geoserver', 'localhost:8180/geoserver']
+GEOSERVER_CLUSTER_HOSTS = ['']
