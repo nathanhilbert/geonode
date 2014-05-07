@@ -19,7 +19,7 @@ from geonode.layers.models import Layer
 from geonode.people.models import Profile
 from geonode.security.enumerations import AUTHENTICATED_USERS, ANONYMOUS_USERS
 
-from geoserver.catalog import FailedRequestError
+from geoserver.catalog import FailedRequestError, Catalog
 from geoserver.layer import Layer as GsLayer
 
 logger = logging.getLogger("geonode.geoserver.signals")
@@ -412,6 +412,31 @@ def geoserver_post_save(instance, sender, **kwargs):
 
     #Save layer styles
     set_styles(instance, gs_catalog)
+
+
+
+
+def geoservercluster_post_save(instance, sender, **kwargs):
+    print "running this geoserverclsuter thing"
+    #### test the reload call for each clustered geoserver
+    if getattr(settings,"GEOSERVER_CLUSTER_HOSTS", True) and len(settings.GEOSERVER_CLUSTER_HOSTS) > 1:
+        #reload the settings in each
+        print "got me a geoserver cluster let's do some work"
+        for geocluster in settings.GEOSERVER_CLUSTER_HOSTS:
+            gs_cluster_cat = Catalog(geocluster)
+            try:
+                res = gs_cluster_cat.reload()
+            except:
+                logger.warn("Geoserver reload failed.")
+            else:
+                if res.status != 200:
+                    logger.warn("Geoserver reload failed with message%s" %str(res.status))
+                else:
+                    print "geoserver reloaded"
+
+
+
+
 
 
 def geoserver_pre_save_maplayer(instance, sender, **kwargs):
