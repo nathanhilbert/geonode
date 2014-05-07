@@ -170,6 +170,9 @@ GEONODE_APPS = (
 
     # GeoNode Contrib Apps
     'geonode.contrib.groups',
+    #custom modules
+    'geonode.datamanager',
+    'django_reset',
 )
 
 INSTALLED_APPS = (
