@@ -106,12 +106,11 @@ In order to install Geonode 2.0 in developing mode on Windows 2008r2 the followi
 
     .. code-block::
     > paver start -–java_path="C:\path\to\java\java.exe"
+    
 
 Visit the geonode site by typing http://localhost:8000 into your browser window.
 
-.. warning:: If the start fails because of an import error related to osgeo, then ensure that the GDAL_LIBRARY_PATH is set in the Windows path.
-
-.. warning:: If you get GEOSversion function not found, then need to need to change line 71 in geonode\Lib\site-packages\Shapely-1.3.0-py2.7-win32.egg\shapely\geos.py from _lgeos = CDLL("geos.dll") to _lgeos = CDLL("geos_c.dll").  See issue https://github.com/Toblerity/Shapely/issues/136
+.. warning:: If the start fails because of an import error that says "from django.contrib.gis.gdal import DataSource", then you must declare the path to the full GDAL library in your local_settings.py file.  GDAL_LIBRARY_PATH = "C:\\Program Files (x86)\\GDAL\\gdal111.dll"
 
 #. To stop the server
 
