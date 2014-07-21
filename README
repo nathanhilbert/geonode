@@ -118,6 +118,9 @@ Windows Development Build Instructions::
     
     # Start the servers
     paver start --java_path=C:/path/to/java/bin/java.exe
+    
+    #If you are receiving the error “ImportError: cannot import name DataSource”,
+    #you will need to declare the full path to your GDAL library in the local_settings.py file (see sample file)
 
 Mac OSX Development Build Instructions::
     
